@@ -121,7 +121,7 @@ func raftpbLitType(info *types.Info, cl *ast.CompositeLit) (*types.Named, bool, 
 	if !ok || n.Obj() == nil || n.Obj().Pkg() == nil {
 		return nil, false, false
 	}
-	if n.Obj().Pkg().Path() != "go.etcd.io/raft/v3/raftpb" {
+	if !strings.HasSuffix(n.Obj().Pkg().Path(), "/raftpb") {
 		return nil, false, false
 	}
 	s := n.Obj().Name()

@@ -210,7 +210,7 @@ func raftpbFieldName(info *types.Info, sel *ast.SelectorExpr) string {
 	if !ok || n.Obj() == nil || n.Obj().Pkg() == nil {
 		return ""
 	}
-	if n.Obj().Pkg().Path() != "go.etcd.io/raft/v3/raftpb" {
+	if !strings.HasSuffix(n.Obj().Pkg().Path(), "/raftpb") {
 		return ""
 	}
 	return s.Obj().Name()

@@ -2,110 +2,93 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/johnknl/rewriter/internal/rewrite"
 	"github.com/johnknl/rewriter/internal/tooling"
 )
 
 func newRunCmd() *cobra.Command {
+	var sourceRef string
+	var modulePath string
+	var outputBranch string
+	var pushRemote string
+	var publish bool
+	var tag string
 	var maxIters int
-	var skipReset bool
 	var skipPrivateCheck bool
 	cmd := &cobra.Command{
 		Use:   "run",
-		Short: "Reset, rewrite, check, and test",
+		Short: "Render rewritten raft from an upstream ref",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repoRoot, err := tooling.EnsureRepoRoot(".")
 			if err != nil {
 				return err
 			}
-
-			const toolRel = "."
-			if !skipReset {
-				if err := tooling.ResetRepoToHeadExceptTool(repoRoot, toolRel); err != nil {
-					return err
-				}
-				fmt.Fprintln(cmd.OutOrStdout(), "reset complete")
-			}
-
-			if err := tooling.EnsureWrappers(repoRoot); err != nil {
-				return err
-			}
-
-			all, err := tooling.GoFiles(repoRoot)
+			upstreamSHA, err := tooling.ResolveRef(repoRoot, sourceRef)
 			if err != nil {
 				return err
 			}
-			files := make([]string, 0, len(all))
-			for _, f := range all {
-				s := filepath.ToSlash(f)
-				if s == "raftpb/wrappers.go" {
-					continue
-				}
-				if len(s) >= len(toolRel)+1 && s[:len(toolRel)+1] == toolRel+"/" {
-					continue
-				}
-				files = append(files, filepath.Join(repoRoot, f))
-			}
-
-			for i := 1; i <= maxIters; i++ {
-				changed, err := rewrite.RewriteFiles(files)
-				if err != nil {
-					return err
-				}
-				typedChanged, err := rewrite.RewriteTypedPBLiterals(repoRoot)
-				if err != nil {
-					return err
-				}
-				getterChanged, err := rewrite.RewriteConfStateSelectorsToGetters(files)
-				if err != nil {
-					return err
-				}
-				hits, err := tooling.CheckLiterals(repoRoot, all)
-				if err != nil {
-					return err
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "iter %d: rewritten=%d typed=%d getter_updates=%d remaining=%d\n", i, changed, typedChanged, getterChanged, len(hits))
-				if len(hits) == 0 {
-					break
-				}
-				if i == maxIters {
-					return fmt.Errorf("literals remain after %d iterations", maxIters)
-				}
-			}
-
-			if _, err := tooling.Run(repoRoot, "go", "test", "./..."); err != nil {
+			renderPath, cleanup, err := tooling.AddDetachedWorktree(repoRoot, sourceRef)
+			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "go test ./... PASS")
+			defer cleanup()
+
+			_, err = runRewritePipeline(renderPath, modulePath, maxIters, func(s string, a ...interface{}) {
+				fmt.Fprintf(cmd.OutOrStdout(), s+"\n", a...)
+			})
+			if err != nil {
+				return err
+			}
+
+			rewriterSHA, err := tooling.CurrentShortSHA(repoRoot)
+			if err != nil {
+				return err
+			}
+			msg := fmt.Sprintf("rewrite: upstream %s via rewriter %s", upstreamSHA[:12], rewriterSHA)
+			if err := tooling.CommitAll(renderPath, msg); err != nil {
+				return err
+			}
 
 			if !skipPrivateCheck {
-				fieldChanged, err := rewrite.RewritePBFieldAccess(repoRoot)
+				renderSHA, err := tooling.ResolveRef(renderPath, "HEAD")
 				if err != nil {
 					return err
 				}
-				fallbackChanged, err := rewrite.RewriteFallbackPrivatePrep(files)
+				validatePath, validateCleanup, err := tooling.AddDetachedWorktree(repoRoot, renderSHA)
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "private-check prep: field_access_updates=%d fallback_updates=%d\n", fieldChanged, fallbackChanged)
-				if err := tooling.PrivatizePBFields(repoRoot); err != nil {
+				defer validateCleanup()
+				if err := runPrivateValidation(validatePath, func(s string, a ...interface{}) {
+					fmt.Fprintf(cmd.OutOrStdout(), s+"\n", a...)
+				}); err != nil {
 					return err
 				}
-				if _, err := tooling.Run(repoRoot, "go", "test", "./..."); err != nil {
+			}
+			if publish {
+				if err := tooling.ForcePushBranch(renderPath, pushRemote, outputBranch); err != nil {
 					return err
 				}
-				fmt.Fprintln(cmd.OutOrStdout(), "private-field validation PASS")
+				if tag != "" {
+					if err := tooling.PushTag(renderPath, pushRemote, tag); err != nil {
+						return err
+					}
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "published branch %s to %s\n", outputBranch, pushRemote)
 			}
 
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&sourceRef, "source-ref", "upstream/main", "upstream git ref to rewrite")
+	cmd.Flags().StringVar(&modulePath, "module-path", "github.com/johnknl/etcd-raft/v3", "target go module path")
+	cmd.Flags().StringVar(&outputBranch, "output-branch", "etcd-main", "target branch for published artifact")
+	cmd.Flags().StringVar(&pushRemote, "push-remote", "origin", "remote for branch/tag publish")
+	cmd.Flags().BoolVar(&publish, "publish", false, "push output branch and optional tag")
+	cmd.Flags().StringVar(&tag, "tag", "", "optional tag to create/push after publish")
 	cmd.Flags().IntVar(&maxIters, "max-iters", 5, "max rewrite iterations")
-	cmd.Flags().BoolVar(&skipReset, "skip-reset", false, "skip reset to HEAD")
 	cmd.Flags().BoolVar(&skipPrivateCheck, "skip-private-check", false, "skip final private-field validation")
 	return cmd
 }
