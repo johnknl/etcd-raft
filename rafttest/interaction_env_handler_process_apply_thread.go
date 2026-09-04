@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"google.golang.org/protobuf/proto"
 
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3"
+	"github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 func (env *InteractionEnv) handleProcessApplyThread(t *testing.T, d datadriven.TestData) error {
@@ -75,14 +75,14 @@ func processApply(n *Node, ents []*raftpb.Entry) error {
 		var cs *raftpb.ConfState
 		switch ent.GetType() {
 		case raftpb.EntryConfChange:
-			cc := &raftpb.ConfChange{}
+			cc := raftpb.NewEmptyConfChange()
 			if err := proto.Unmarshal(ent.GetData(), cc); err != nil {
 				return err
 			}
 			update = cc.Context
 			cs = n.RawNode.ApplyConfChange(cc)
 		case raftpb.EntryConfChangeV2:
-			cc := &raftpb.ConfChangeV2{}
+			cc := raftpb.NewEmptyConfChangeV2()
 			if err := proto.Unmarshal(ent.GetData(), cc); err != nil {
 				return err
 			}

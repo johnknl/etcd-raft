@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 var testFormatter EntryFormatter = func(data []byte) string {
@@ -32,18 +32,14 @@ var testFormatter EntryFormatter = func(data []byte) string {
 }
 
 func TestDescribeEntry(t *testing.T) {
-	entry := &pb.Entry{
-		Term:  new(uint64(1)),
-		Index: new(uint64(2)),
-		Type:  pb.EntryNormal.Enum(),
-		Data:  []byte("hello\x00world"),
-	}
+	entry := pb.NewEmptyEntry().SetType(pb.EntryNormal).SetTermPtr(uint64(1)).SetIndexPtr(uint64(2)).SetData([]byte("hello\x00world"))
+
 	require.Equal(t, `1/2 EntryNormal "hello\x00world"`, DescribeEntry(entry, nil))
 	require.Equal(t, "1/2 EntryNormal HELLO\x00WORLD", DescribeEntry(entry, testFormatter))
 }
 
 func TestLimitSize(t *testing.T) {
-	ents := []*pb.Entry{{Index: new(uint64(4)), Term: new(uint64(4))}, {Index: new(uint64(5)), Term: new(uint64(5))}, {Index: new(uint64(6)), Term: new(uint64(6))}}
+	ents := []*pb.Entry{pb.NewEntryRef(uint64(4), uint64(4)), pb.NewEntryRef(uint64(5), uint64(5)), pb.NewEntryRef(uint64(6), uint64(6))}
 	prefix := func(size int) []*pb.Entry {
 		return append([]*pb.Entry{}, ents[:size]...) // protect the original slice
 	}
@@ -147,6 +143,6 @@ func TestIsResponseMsg(t *testing.T) {
 // This property is important because new leaders append an empty entry to their log,
 // and we don't want this to count towards the uncommitted log quota.
 func TestPayloadSizeOfEmptyEntry(t *testing.T) {
-	e := &pb.Entry{Data: nil}
+	e := pb.NewEntryData(nil)
 	require.Equal(t, 0, int(payloadSize(e)))
 }

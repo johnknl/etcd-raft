@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3"
+	"github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 func (env *InteractionEnv) handleSendSnapshot(t *testing.T, d datadriven.TestData) error {
@@ -38,13 +38,11 @@ func (env *InteractionEnv) SendSnapshot(fromIdx, toIdx int) error {
 	}
 	from, to := uint64(fromIdx+1), uint64(toIdx+1)
 	fromStatus := env.Nodes[fromIdx].BasicStatus()
-	msg := &raftpb.Message{
-		Type:     raftpb.MsgSnap.Enum(),
-		Term:     new(fromStatus.GetTerm()),
-		From:     new(from),
-		To:       new(to),
-		Snapshot: snap,
-	}
+	msg := raftpb.NewMessage(raftpb.MsgSnap,
+
+		from,
+		to).SetTermPtr(fromStatus.GetTerm()).SetSnapshot(snap)
+
 	env.Messages = append(env.Messages, msg)
 	_, _ = env.Output.WriteString(raft.DescribeMessage(msg, nil))
 	return nil

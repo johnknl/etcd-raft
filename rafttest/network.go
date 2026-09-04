@@ -21,7 +21,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 // a network interface
@@ -97,7 +97,7 @@ func (rn *raftNetwork) send(m *raftpb.Message) {
 		panic(err)
 	}
 
-	cm := &raftpb.Message{}
+	cm := raftpb.NewEmptyMessage()
 	err = proto.Unmarshal(b, cm)
 	if err != nil {
 		panic(err)

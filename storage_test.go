@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 func TestStorageTerm(t *testing.T) {
@@ -147,7 +147,7 @@ func TestStorageCompact(t *testing.T) {
 
 func TestStorageCreateSnapshot(t *testing.T) {
 	ents := index(3).terms(3, 4, 5)
-	cs := &pb.ConfState{Voters: []uint64{1, 2, 3}}
+	cs := pb.NewEmptyConfState().SetVoters([]uint64{1, 2, 3})
 	data := []byte("data")
 
 	tests := []struct {
@@ -156,8 +156,8 @@ func TestStorageCreateSnapshot(t *testing.T) {
 		werr  error
 		wsnap *pb.Snapshot
 	}{
-		{4, nil, &pb.Snapshot{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: &pb.ConfState{Voters: []uint64{1, 2, 3}}}}},
-		{5, nil, &pb.Snapshot{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(5)), Term: new(uint64(5)), ConfState: &pb.ConfState{Voters: []uint64{1, 2, 3}}}}},
+		{4, nil, pb.NewEmptySnapshot().SetMetadata(pb.NewEmptySnapshotMetadata().SetTermPtr(uint64(4)).SetIndexPtr(uint64(4)).SetConfState(pb.NewEmptyConfState().SetVoters([]uint64{1, 2, 3}))).SetData(data)},
+		{5, nil, pb.NewEmptySnapshot().SetMetadata(pb.NewEmptySnapshotMetadata().SetTermPtr(uint64(5)).SetIndexPtr(uint64(5)).SetConfState(pb.NewEmptyConfState().SetVoters([]uint64{1, 2, 3}))).SetData(data)},
 	}
 
 	for _, tt := range tests {
@@ -228,7 +228,7 @@ func TestStorageAppend(t *testing.T) {
 }
 
 func TestStorageApplySnapshot(t *testing.T) {
-	cs := &pb.ConfState{Voters: []uint64{1, 2, 3}}
+	cs := pb.NewEmptyConfState().SetVoters([]uint64{1, 2, 3})
 	data := []byte("data")
 
 	testCases := []struct {
@@ -237,25 +237,18 @@ func TestStorageApplySnapshot(t *testing.T) {
 		expectedError error
 	}{
 		{
-			name: "normal case",
-			snapshots: []*pb.Snapshot{
-				{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: cs}},
-			},
+			name:          "normal case",
+			snapshots:     []*pb.Snapshot{pb.NewEmptySnapshot().SetMetadata(pb.NewEmptySnapshotMetadata().SetTermPtr(uint64(4)).SetIndexPtr(uint64(4)).SetConfState(cs)).SetData(data)},
 			expectedError: nil,
 		},
 		{
-			name: "snapshot out of date",
-			snapshots: []*pb.Snapshot{
-				{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(4)), Term: new(uint64(4)), ConfState: cs}},
-				{Data: data, Metadata: &pb.SnapshotMetadata{Index: new(uint64(3)), Term: new(uint64(3)), ConfState: cs}},
-			},
+			name:          "snapshot out of date",
+			snapshots:     []*pb.Snapshot{pb.NewEmptySnapshot().SetMetadata(pb.NewEmptySnapshotMetadata().SetTermPtr(uint64(4)).SetIndexPtr(uint64(4)).SetConfState(cs)).SetData(data), pb.NewEmptySnapshot().SetMetadata(pb.NewEmptySnapshotMetadata().SetTermPtr(uint64(3)).SetIndexPtr(uint64(3)).SetConfState(cs)).SetData(data)},
 			expectedError: ErrSnapOutOfDate,
 		},
 		{
-			name: "bootstrap with confState",
-			snapshots: []*pb.Snapshot{
-				{Data: data, Metadata: &pb.SnapshotMetadata{ConfState: cs}},
-			},
+			name:          "bootstrap with confState",
+			snapshots:     []*pb.Snapshot{pb.NewEmptySnapshot().SetMetadata(pb.NewEmptySnapshotMetadata().SetConfState(cs)).SetData(data)},
 			expectedError: nil,
 		},
 	}

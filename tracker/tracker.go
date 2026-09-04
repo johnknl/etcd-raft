@@ -19,8 +19,8 @@ import (
 	"slices"
 	"strings"
 
-	"go.etcd.io/raft/v3/quorum"
-	pb "go.etcd.io/raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3/quorum"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 // Config reflects the configuration tracked in a ProgressTracker.
@@ -146,13 +146,8 @@ func MakeProgressTracker(maxInflight int, maxBytes uint64) ProgressTracker {
 
 // ConfState returns a ConfState representing the active configuration.
 func (p *ProgressTracker) ConfState() *pb.ConfState {
-	return &pb.ConfState{
-		Voters:         p.Voters[0].Slice(),
-		VotersOutgoing: p.Voters[1].Slice(),
-		Learners:       quorum.MajorityConfig(p.Learners).Slice(),
-		LearnersNext:   quorum.MajorityConfig(p.LearnersNext).Slice(),
-		AutoLeave:      new(p.AutoLeave),
-	}
+	return pb.NewEmptyConfState().SetVoters(p.Voters[0].Slice()).SetLearners(quorum.MajorityConfig(p.Learners).Slice()).SetVotersOutgoing(p.Voters[1].Slice()).SetLearnersNext(quorum.MajorityConfig(p.LearnersNext).Slice()).SetAutoLeave(p.AutoLeave)
+
 }
 
 // IsSingleton returns true if (and only if) there is only one voting member

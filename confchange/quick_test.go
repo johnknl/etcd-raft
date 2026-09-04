@@ -23,8 +23,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pb "go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3/tracker"
 )
 
 // TestConfChangeQuick uses quickcheck to verify that simple and joint config
@@ -138,7 +138,7 @@ func genCC(num func() int, id func() uint64, typ func() pb.ConfChangeType) []*pb
 	var ccs []*pb.ConfChangeSingle
 	n := num()
 	for i := 0; i < n; i++ {
-		ccs = append(ccs, &pb.ConfChangeSingle{Type: typ().Enum(), NodeId: new(id())})
+		ccs = append(ccs, pb.NewConfChangeSingle(typ(), id()))
 	}
 	return ccs
 }
@@ -172,6 +172,6 @@ func (initialChanges) Generate(rand *rand.Rand, _ int) reflect.Value {
 	// NodeId one is special - it's in the initial config and will be a voter
 	// always (this is to avoid uninteresting edge cases where the simple conf
 	// changes can't easily make progress).
-	ccs := append([]*pb.ConfChangeSingle{{Type: pb.ConfChangeAddNode.Enum(), NodeId: new(uint64(1))}}, genCC(num, id, typ)...)
+	ccs := append([]*pb.ConfChangeSingle{pb.NewConfChangeSingle(pb.ConfChangeAddNode, uint64(1))}, genCC(num, id, typ)...)
 	return reflect.ValueOf(ccs)
 }

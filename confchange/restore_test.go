@@ -23,8 +23,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	pb "go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3/tracker"
 )
 
 type rndConfChange pb.ConfState
@@ -40,8 +40,10 @@ func (*rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
 		}
 		return out
 	}
-	cs := &pb.ConfState{}
+	cs := pb.NewEmptyConfState(
 	// NB: never generate the empty ConfState, that one should be unit tested.
+	)
+
 	nVoters := 1 + rand.Intn(5)
 
 	nLearners := rand.Intn(5)
@@ -68,8 +70,8 @@ func (*rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
 	// NB: this code avoids creating non-nil empty slices (here and below).
 	nOutgoingRetainedVoters := rand.Intn(nVoters + 1)
 	if nOutgoingRetainedVoters > 0 || nRemovedVoters > 0 {
-		cs.VotersOutgoing = append([]uint64(nil), cs.Voters[:nOutgoingRetainedVoters]...)
-		cs.VotersOutgoing = append(cs.VotersOutgoing, ids[:nRemovedVoters]...)
+		cs.VotersOutgoing = append([]uint64(nil), cs.GetVoters()[:nOutgoingRetainedVoters]...)
+		cs.VotersOutgoing = append(cs.GetVotersOutgoing(), ids[:nRemovedVoters]...)
 	}
 	// Only outgoing voters that are not also incoming voters can be in
 	// LearnersNext (they represent demotions).
@@ -79,7 +81,7 @@ func (*rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
 		}
 	}
 
-	cs.AutoLeave = new(len(cs.VotersOutgoing) > 0 && rand.Intn(2) == 1)
+	cs.AutoLeave = new(len(cs.GetVotersOutgoing()) > 0 && rand.Intn(2) == 1)
 	return reflect.ValueOf((*rndConfChange)(cs))
 }
 
@@ -121,12 +123,7 @@ func TestRestore(t *testing.T) {
 	}
 
 	// Unit tests.
-	for _, cs := range []*pb.ConfState{
-		{},
-		{Voters: ids(1, 2, 3)},
-		{Voters: ids(1, 2, 3), Learners: ids(4, 5, 6)},
-		{Voters: ids(1, 2, 3), Learners: ids(5), VotersOutgoing: ids(1, 2, 4, 6), LearnersNext: ids(4)},
-	} {
+	for _, cs := range []*pb.ConfState{pb.NewEmptyConfState(), pb.NewEmptyConfState().SetVoters(ids(1, 2, 3)), pb.NewEmptyConfState().SetVoters(ids(1, 2, 3)).SetLearners(ids(4, 5, 6)), pb.NewEmptyConfState().SetVoters(ids(1, 2, 3)).SetLearners(ids(5)).SetVotersOutgoing(ids(1, 2, 4, 6)).SetLearnersNext(ids(4))} {
 		pb.EnsureConfState(cs)
 		if !f(cs) {
 			t.FailNow() // f() already logged a nice t.Error()

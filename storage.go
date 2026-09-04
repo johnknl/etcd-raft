@@ -20,7 +20,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 // ErrCompacted is returned by Storage.Entries/Compact when a requested
@@ -119,7 +119,7 @@ type MemoryStorage struct {
 func NewMemoryStorage() *MemoryStorage {
 	ms := &MemoryStorage{
 		// When starting from scratch populate the list with a dummy entry at term zero.
-		ents: []*pb.Entry{{}},
+		ents: []*pb.Entry{pb.NewEmptyEntry()},
 	}
 	ms.snapshot = pb.EnsureSnapshot(ms.snapshot)
 	return ms
@@ -232,7 +232,7 @@ func (ms *MemoryStorage) ApplySnapshot(snap *pb.Snapshot) error {
 	}
 
 	ms.snapshot = proto.Clone(snap).(*pb.Snapshot)
-	ms.ents = []*pb.Entry{{Term: new(snap.GetMetadata().GetTerm()), Index: new(snap.GetMetadata().GetIndex())}}
+	ms.ents = []*pb.Entry{pb.NewEntryRef(snap.GetMetadata().GetTerm(), snap.GetMetadata().GetIndex())}
 	return nil
 }
 
@@ -281,7 +281,7 @@ func (ms *MemoryStorage) Compact(compactIndex uint64) error {
 	// ms.ents are immutable, and can be referenced from outside MemoryStorage
 	// through slices returned by ms.Entries().
 	ents := make([]*pb.Entry, 1, uint64(len(ms.ents))-i)
-	ents[0] = &pb.Entry{Index: new(ms.ents[i].GetIndex()), Term: new(ms.ents[i].GetTerm())}
+	ents[0] = pb.NewEntryRef(ms.ents[i].GetTerm(), ms.ents[i].GetIndex())
 	ents = append(ents, ms.ents[i+1:]...)
 	ms.ents = ents
 	return nil

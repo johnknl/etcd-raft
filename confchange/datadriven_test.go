@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/datadriven"
 
-	pb "go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3/tracker"
 )
 
 func TestConfChangeDataDriven(t *testing.T) {
@@ -58,7 +58,7 @@ func TestConfChangeDataDriven(t *testing.T) {
 				if len(tok) < 2 {
 					return fmt.Sprintf("unknown token %s", tok)
 				}
-				cc := &pb.ConfChangeSingle{}
+				cc := pb.NewEmptyConfChangeSingle()
 				switch tok[0] {
 				case 'v':
 					cc.Type = pb.ConfChangeAddNode.Enum()

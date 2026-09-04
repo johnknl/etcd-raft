@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 // readyWithTimeout selects from n.Ready() with a 1-second timeout. It
@@ -57,7 +57,7 @@ func TestNodeStep(t *testing.T) {
 			recvc: make(chan *raftpb.Message, 1),
 		}
 		msgt := raftpb.MessageType(i)
-		n.Step(t.Context(), &raftpb.Message{Type: msgt.Enum()})
+		n.Step(t.Context(), raftpb.NewMessage(msgt, 0, 0))
 		// Proposal goes to proc chan. Others go to recvc chan.
 		if msgt == raftpb.MsgProp {
 			select {
@@ -105,7 +105,7 @@ func TestNodeStepUnblock(t *testing.T) {
 	for i, tt := range tests {
 		errc := make(chan error, 1)
 		go func() {
-			err := n.Step(ctx, &raftpb.Message{Type: raftpb.MsgProp.Enum()})
+			err := n.Step(ctx, raftpb.NewMessage(raftpb.MsgProp, 0, 0))
 			errc <- err
 		}()
 		tt.unblock()
@@ -175,18 +175,18 @@ func TestDisableProposalForwarding(t *testing.T) {
 	nt := newNetwork(r1, r2, r3)
 
 	// elect r1 as leader
-	nt.send(&raftpb.Message{From: new(uint64(1)), To: new(uint64(1)), Type: raftpb.MsgHup.Enum()})
+	nt.send(raftpb.NewMessage(raftpb.MsgHup, uint64(1), uint64(1)))
 
-	var testEntries = []*raftpb.Entry{{Data: []byte("testdata")}}
+	var testEntries = []*raftpb.Entry{raftpb.NewEntryData([]byte("testdata"))}
 
 	// send proposal to r2(follower) where DisableProposalForwarding is false
-	r2.Step(&raftpb.Message{From: new(uint64(2)), To: new(uint64(2)), Type: raftpb.MsgProp.Enum(), Entries: testEntries})
+	r2.Step(raftpb.NewMessage(raftpb.MsgProp, uint64(2), uint64(2)).SetEntries(testEntries))
 
 	// verify r2(follower) does forward the proposal when DisableProposalForwarding is false
 	require.Len(t, r2.msgs, 1)
 
 	// send proposal to r3(follower) where DisableProposalForwarding is true
-	r3.Step(&raftpb.Message{From: new(uint64(3)), To: new(uint64(3)), Type: raftpb.MsgProp.Enum(), Entries: testEntries})
+	r3.Step(raftpb.NewMessage(raftpb.MsgProp, uint64(3), uint64(3)).SetEntries(testEntries))
 
 	// verify r3(follower) does not forward the proposal when DisableProposalForwarding is true
 	require.Empty(t, r3.msgs)
@@ -202,28 +202,28 @@ func TestNodeReadIndexToOldLeader(t *testing.T) {
 	nt := newNetwork(r1, r2, r3)
 
 	// elect r1 as leader
-	nt.send(&raftpb.Message{From: new(uint64(1)), To: new(uint64(1)), Type: raftpb.MsgHup.Enum()})
+	nt.send(raftpb.NewMessage(raftpb.MsgHup, uint64(1), uint64(1)))
 
-	var testEntries = []*raftpb.Entry{{Data: []byte("testdata")}}
+	var testEntries = []*raftpb.Entry{raftpb.NewEntryData([]byte("testdata"))}
 
 	// send readindex request to r2(follower)
-	r2.Step(&raftpb.Message{From: new(uint64(2)), To: new(uint64(2)), Type: raftpb.MsgReadIndex.Enum(), Entries: testEntries})
+	r2.Step(raftpb.NewMessage(raftpb.MsgReadIndex, uint64(2), uint64(2)).SetEntries(testEntries))
 
 	// verify r2(follower) forwards this message to r1(leader) with term not set
 	require.Len(t, r2.msgs, 1)
-	readIndxMsg1 := &raftpb.Message{From: new(uint64(2)), To: new(uint64(1)), Type: raftpb.MsgReadIndex.Enum(), Entries: testEntries}
+	readIndxMsg1 := raftpb.NewMessage(raftpb.MsgReadIndex, uint64(2), uint64(1)).SetEntries(testEntries)
 	require.Equal(t, readIndxMsg1, r2.msgs[0])
 
 	// send readindex request to r3(follower)
-	r3.Step(&raftpb.Message{From: new(uint64(3)), To: new(uint64(3)), Type: raftpb.MsgReadIndex.Enum(), Entries: testEntries})
+	r3.Step(raftpb.NewMessage(raftpb.MsgReadIndex, uint64(3), uint64(3)).SetEntries(testEntries))
 
 	// verify r3(follower) forwards this message to r1(leader) with term not set as well.
 	require.Len(t, r3.msgs, 1)
-	readIndxMsg2 := &raftpb.Message{From: new(uint64(3)), To: new(uint64(1)), Type: raftpb.MsgReadIndex.Enum(), Entries: testEntries}
+	readIndxMsg2 := raftpb.NewMessage(raftpb.MsgReadIndex, uint64(3), uint64(1)).SetEntries(testEntries)
 	require.Equal(t, readIndxMsg2, r3.msgs[0])
 
 	// now elect r3 as leader
-	nt.send(&raftpb.Message{From: new(uint64(3)), To: new(uint64(3)), Type: raftpb.MsgHup.Enum()})
+	nt.send(raftpb.NewMessage(raftpb.MsgHup, uint64(3), uint64(3)))
 
 	// let r1 steps the two messages previously we got from r2, r3
 	r1.Step(readIndxMsg1)
@@ -231,9 +231,9 @@ func TestNodeReadIndexToOldLeader(t *testing.T) {
 
 	// verify r1(follower) forwards these messages again to r3(new leader)
 	require.Len(t, r1.msgs, 2)
-	readIndxMsg3 := &raftpb.Message{From: new(uint64(2)), To: new(uint64(3)), Type: raftpb.MsgReadIndex.Enum(), Entries: testEntries}
+	readIndxMsg3 := raftpb.NewMessage(raftpb.MsgReadIndex, uint64(2), uint64(3)).SetEntries(testEntries)
 	require.Equal(t, readIndxMsg3, r1.msgs[0])
-	readIndxMsg3 = &raftpb.Message{From: new(uint64(3)), To: new(uint64(3)), Type: raftpb.MsgReadIndex.Enum(), Entries: testEntries}
+	readIndxMsg3 = raftpb.NewMessage(raftpb.MsgReadIndex, uint64(3), uint64(3)).SetEntries(testEntries)
 	require.Equal(t, readIndxMsg3, r1.msgs[1])
 }
 
@@ -266,7 +266,7 @@ func TestNodeProposeConfig(t *testing.T) {
 		}
 		n.Advance()
 	}
-	cc := &raftpb.ConfChange{Type: raftpb.ConfChangeAddNode.Enum(), NodeId: new(uint64(1))}
+	cc := raftpb.NewConfChange(raftpb.ConfChangeAddNode, uint64(1), nil)
 	ccdata, err := proto.Marshal(cc)
 	require.NoError(t, err)
 	n.ProposeConfChange(t.Context(), cc)
@@ -312,7 +312,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 					switch e.GetType() {
 					case raftpb.EntryNormal:
 					case raftpb.EntryConfChange:
-						cc := &raftpb.ConfChange{}
+						cc := raftpb.NewEmptyConfChange()
 						proto.Unmarshal(e.GetData(), cc)
 						n.ApplyConfChange(cc)
 						applied = true
@@ -326,7 +326,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 		}
 	}()
 
-	cc1 := &raftpb.ConfChange{Type: raftpb.ConfChangeAddNode.Enum(), NodeId: new(uint64(1))}
+	cc1 := raftpb.NewConfChange(raftpb.ConfChangeAddNode, uint64(1), nil)
 	ccdata1, _ := proto.Marshal(cc1)
 	n.ProposeConfChange(ctx, cc1)
 	<-applyConfChan
@@ -336,7 +336,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 	<-applyConfChan
 
 	// the new node join should be ok
-	cc2 := &raftpb.ConfChange{Type: raftpb.ConfChangeAddNode.Enum(), NodeId: new(uint64(2))}
+	cc2 := raftpb.NewConfChange(raftpb.ConfChangeAddNode, uint64(2), nil)
 	ccdata2, _ := proto.Marshal(cc2)
 	n.ProposeConfChange(ctx, cc2)
 	<-applyConfChan
@@ -481,30 +481,26 @@ func TestNodeStop(t *testing.T) {
 // start with correct configuration change entries, and can accept and commit
 // proposals.
 func TestNodeStart(t *testing.T) {
-	cc := &raftpb.ConfChange{Type: raftpb.ConfChangeAddNode.Enum(), NodeId: new(uint64(1))}
+	cc := raftpb.NewConfChange(raftpb.ConfChangeAddNode, uint64(1), nil)
 	ccdata, err := proto.Marshal(cc)
 	require.NoError(t, err)
 	wants := []Ready{
 		{
-			HardState: &raftpb.HardState{Term: new(uint64(1)), Commit: new(uint64(1)), Vote: new(uint64(0))},
-			Entries: []*raftpb.Entry{
-				{Type: raftpb.EntryConfChange.Enum(), Term: new(uint64(1)), Index: new(uint64(1)), Data: ccdata},
-			},
-			CommittedEntries: []*raftpb.Entry{
-				{Type: raftpb.EntryConfChange.Enum(), Term: new(uint64(1)), Index: new(uint64(1)), Data: ccdata},
-			},
-			MustSync: true,
-		},
-		{
-			HardState:        &raftpb.HardState{Term: new(uint64(2)), Commit: new(uint64(2)), Vote: new(uint64(1))},
-			Entries:          []*raftpb.Entry{{Term: new(uint64(2)), Index: new(uint64(3)), Data: []byte("foo")}},
-			CommittedEntries: []*raftpb.Entry{{Term: new(uint64(2)), Index: new(uint64(2)), Data: nil}},
+			HardState:        raftpb.NewHardState(uint64(1), uint64(0), uint64(1)),
+			Entries:          []*raftpb.Entry{raftpb.NewEmptyEntry().SetType(raftpb.EntryConfChange).SetTerm(uint64(1)).SetIndex(uint64(1)).SetData(ccdata)},
+			CommittedEntries: []*raftpb.Entry{raftpb.NewEmptyEntry().SetType(raftpb.EntryConfChange).SetTerm(uint64(1)).SetIndex(uint64(1)).SetData(ccdata)},
 			MustSync:         true,
 		},
 		{
-			HardState:        &raftpb.HardState{Term: new(uint64(2)), Commit: new(uint64(3)), Vote: new(uint64(1))},
+			HardState:        raftpb.NewHardState(uint64(2), uint64(1), uint64(2)),
+			Entries:          []*raftpb.Entry{raftpb.NewEmptyEntry().SetTerm(uint64(2)).SetIndex(uint64(3)).SetData([]byte("foo"))},
+			CommittedEntries: []*raftpb.Entry{raftpb.NewEmptyEntry().SetTerm(uint64(2)).SetIndex(uint64(2)).SetData(nil)},
+			MustSync:         true,
+		},
+		{
+			HardState:        raftpb.NewHardState(uint64(2), uint64(1), uint64(3)),
 			Entries:          nil,
-			CommittedEntries: []*raftpb.Entry{{Term: new(uint64(2)), Index: new(uint64(3)), Data: []byte("foo")}},
+			CommittedEntries: []*raftpb.Entry{raftpb.NewEmptyEntry().SetTerm(uint64(2)).SetIndex(uint64(3)).SetData([]byte("foo"))},
 			MustSync:         false,
 		},
 	}
@@ -564,11 +560,8 @@ func TestNodeStart(t *testing.T) {
 }
 
 func TestNodeRestart(t *testing.T) {
-	entries := []*raftpb.Entry{
-		{Term: new(uint64(1)), Index: new(uint64(1))},
-		{Term: new(uint64(1)), Index: new(uint64(2)), Data: []byte("foo")},
-	}
-	st := &raftpb.HardState{Term: new(uint64(1)), Commit: new(uint64(1))}
+	entries := []*raftpb.Entry{raftpb.NewEntryRef(uint64(1), uint64(1)), raftpb.NewEmptyEntry().SetTerm(uint64(1)).SetIndex(uint64(2)).SetData([]byte("foo"))}
+	st := raftpb.NewEmptyHardState().SetTermPtr(uint64(1)).SetCommit(uint64(1))
 
 	want := Ready{
 		// No HardState is emitted because there was no change.
@@ -603,17 +596,10 @@ func TestNodeRestart(t *testing.T) {
 }
 
 func TestNodeRestartFromSnapshot(t *testing.T) {
-	snap := &raftpb.Snapshot{
-		Metadata: &raftpb.SnapshotMetadata{
-			ConfState: &raftpb.ConfState{Voters: []uint64{1, 2}},
-			Index:     new(uint64(2)),
-			Term:      new(uint64(1)),
-		},
-	}
-	entries := []*raftpb.Entry{
-		{Term: new(uint64(1)), Index: new(uint64(3)), Data: []byte("foo")},
-	}
-	st := &raftpb.HardState{Term: new(uint64(1)), Commit: new(uint64(3))}
+	snap := raftpb.NewEmptySnapshot().SetMetadata(raftpb.NewEmptySnapshotMetadata().SetTermPtr(uint64(1)).SetIndexPtr(uint64(2)).SetConfState(raftpb.NewEmptyConfState().SetVoters([]uint64{1, 2})))
+
+	entries := []*raftpb.Entry{raftpb.NewEmptyEntry().SetTerm(uint64(1)).SetIndex(uint64(3)).SetData([]byte("foo"))}
+	st := raftpb.NewEmptyHardState().SetTermPtr(uint64(1)).SetCommit(uint64(3))
 
 	want := Ready{
 		// No HardState is emitted because nothing changed relative to what is
@@ -705,9 +691,9 @@ func TestIsHardStateEqual(t *testing.T) {
 		we bool
 	}{
 		{nil, true},
-		{&raftpb.HardState{Vote: new(uint64(1))}, false},
-		{&raftpb.HardState{Commit: new(uint64(1))}, false},
-		{&raftpb.HardState{Term: new(uint64(1))}, false},
+		{raftpb.NewEmptyHardState().SetVote(uint64(1)), false},
+		{raftpb.NewEmptyHardState().SetCommit(uint64(1)), false},
+		{raftpb.NewEmptyHardState().SetTerm(uint64(1)), false},
 	}
 
 	for i, tt := range tests {
@@ -741,7 +727,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 					if ent.GetType() != raftpb.EntryConfChange {
 						continue
 					}
-					cc := &raftpb.ConfChange{}
+					cc := raftpb.NewEmptyConfChange()
 					proto.Unmarshal(ent.GetData(), cc)
 					state := n.ApplyConfChange(cc)
 					assert.True(t, len(state.Learners) > 0 && state.Learners[0] == cc.GetNodeId() && cc.GetNodeId() == 2,
@@ -756,7 +742,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 			}
 		}
 	}()
-	cc := &raftpb.ConfChange{Type: raftpb.ConfChangeAddLearnerNode.Enum(), NodeId: new(uint64(2))}
+	cc := raftpb.NewConfChange(raftpb.ConfChangeAddLearnerNode, uint64(2), nil)
 	n.ProposeConfChange(t.Context(), cc)
 	<-applyConfChan
 	close(stop)
@@ -787,20 +773,20 @@ func TestAppendPagination(t *testing.T) {
 		return true
 	}
 
-	n.send(&raftpb.Message{From: new(uint64(1)), To: new(uint64(1)), Type: raftpb.MsgHup.Enum()})
+	n.send(raftpb.NewMessage(raftpb.MsgHup, uint64(1), uint64(1)))
 
 	// Partition the network while we make our proposals. This forces
 	// the entries to be batched into larger messages.
 	n.isolate(1)
 	blob := []byte(strings.Repeat("a", 1000))
 	for i := 0; i < 5; i++ {
-		n.send(&raftpb.Message{From: new(uint64(1)), To: new(uint64(1)), Type: raftpb.MsgProp.Enum(), Entries: []*raftpb.Entry{{Data: blob}}})
+		n.send(raftpb.NewMessage(raftpb.MsgProp, uint64(1), uint64(1)).SetEntries([]*raftpb.Entry{raftpb.NewEntryData(blob)}))
 	}
 	n.recover()
 
 	// After the partition recovers, tick the clock to wake everything
 	// back up and send the messages.
-	n.send(&raftpb.Message{From: new(uint64(1)), To: new(uint64(1)), Type: raftpb.MsgBeat.Enum()})
+	n.send(raftpb.NewMessage(raftpb.MsgBeat, uint64(1), uint64(1)))
 	assert.True(t, seenFullMessage, "didn't see any messages more than half the max size; something is wrong with this test")
 }
 
@@ -1019,22 +1005,15 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 	s := &ignoreSizeHintMemStorage{
 		MemoryStorage: newTestMemoryStorage(withPeers(1)),
 	}
-	persistedHardState := &raftpb.HardState{
-		Term:   new(uint64(1)),
-		Vote:   new(uint64(1)),
-		Commit: new(uint64(10)),
-	}
+	persistedHardState := raftpb.NewHardState(uint64(1),
+		uint64(1),
+		uint64(10))
 
 	s.hardState = persistedHardState
 	s.ents = make([]*raftpb.Entry, 10)
 	var size uint64
 	for i := range s.ents {
-		ent := &raftpb.Entry{
-			Term:  new(uint64(1)),
-			Index: new(uint64(i + 1)),
-			Type:  raftpb.EntryNormal.Enum(),
-			Data:  []byte("a"),
-		}
+		ent := raftpb.NewEmptyEntry().SetType(raftpb.EntryNormal).SetTermPtr(uint64(1)).SetIndexPtr(uint64(i + 1)).SetData([]byte("a"))
 
 		s.ents[i] = ent
 		size += uint64(proto.Size(ent))

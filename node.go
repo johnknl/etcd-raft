@@ -18,7 +18,7 @@ import (
 	"context"
 	"errors"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 type SnapshotStatus int
@@ -29,9 +29,11 @@ const (
 )
 
 var (
-	emptyState = &pb.HardState{}
+	emptyState = pb.NewEmptyHardState(
 
 	// ErrStopped is returned by methods on Nodes that have been stopped.
+	)
+
 	ErrStopped = errors.New("raft: stopped")
 )
 
@@ -465,11 +467,11 @@ func (n *node) Tick() {
 }
 
 func (n *node) Campaign(ctx context.Context) error {
-	return n.step(ctx, &pb.Message{Type: pb.MsgHup.Enum()})
+	return n.step(ctx, pb.NewMessage(pb.MsgHup, 0, 0))
 }
 
 func (n *node) Propose(ctx context.Context, data []byte) error {
-	return n.stepWait(ctx, &pb.Message{Type: pb.MsgProp.Enum(), Entries: []*pb.Entry{{Data: data}}})
+	return n.stepWait(ctx, pb.NewMessage(pb.MsgProp, 0, 0).SetEntries([]*pb.Entry{pb.NewEntryData(data)}))
 }
 
 func (n *node) Step(ctx context.Context, m *pb.Message) error {
@@ -490,7 +492,7 @@ func confChangeToMsg(c pb.ConfChangeI) (*pb.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &pb.Message{Type: pb.MsgProp.Enum(), Entries: []*pb.Entry{{Type: typ.Enum(), Data: data}}}, nil
+	return pb.NewMessage(pb.MsgProp, 0, 0).SetEntries([]*pb.Entry{pb.NewEmptyEntry().SetType(typ).SetData(data)}), nil
 }
 
 func (n *node) ProposeConfChange(ctx context.Context, cc pb.ConfChangeI) error {
@@ -584,7 +586,7 @@ func (n *node) Status() Status {
 
 func (n *node) ReportUnreachable(id uint64) {
 	select {
-	case n.recvc <- &pb.Message{Type: pb.MsgUnreachable.Enum(), From: new(id)}:
+	case n.recvc <- pb.NewMessage(pb.MsgUnreachable, 0, 0).SetFrom(id):
 	case <-n.done:
 	}
 }
@@ -593,7 +595,7 @@ func (n *node) ReportSnapshot(id uint64, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
 	select {
-	case n.recvc <- &pb.Message{Type: pb.MsgSnapStatus.Enum(), From: new(id), Reject: new(rej)}:
+	case n.recvc <- pb.NewMessage(pb.MsgSnapStatus, 0, 0).SetFromPtr(id).SetReject(rej):
 	case <-n.done:
 	}
 }
@@ -601,16 +603,16 @@ func (n *node) ReportSnapshot(id uint64, status SnapshotStatus) {
 func (n *node) TransferLeadership(ctx context.Context, lead, transferee uint64) {
 	select {
 	// manually set 'from' and 'to', so that leader can voluntarily transfers its leadership
-	case n.recvc <- &pb.Message{Type: pb.MsgTransferLeader.Enum(), From: new(transferee), To: new(lead)}:
+	case n.recvc <- pb.NewMessage(pb.MsgTransferLeader, transferee, lead):
 	case <-n.done:
 	case <-ctx.Done():
 	}
 }
 
 func (n *node) ForgetLeader(ctx context.Context) error {
-	return n.step(ctx, &pb.Message{Type: pb.MsgForgetLeader.Enum()})
+	return n.step(ctx, pb.NewMessage(pb.MsgForgetLeader, 0, 0))
 }
 
 func (n *node) ReadIndex(ctx context.Context, rctx []byte) error {
-	return n.step(ctx, &pb.Message{Type: pb.MsgReadIndex.Enum(), Entries: []*pb.Entry{{Data: rctx}}})
+	return n.step(ctx, pb.NewMessage(pb.MsgReadIndex, 0, 0).SetEntries([]*pb.Entry{pb.NewEntryData(rctx)}))
 }

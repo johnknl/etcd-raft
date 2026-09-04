@@ -15,8 +15,8 @@
 package confchange
 
 import (
-	pb "go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3/tracker"
 )
 
 // toConfChangeSingle translates a conf state into 1) a slice of operations creating
@@ -52,13 +52,12 @@ func toConfChangeSingle(cs *pb.ConfState) (out []*pb.ConfChangeSingle, in []*pb.
 	//
 	// as desired.
 
-	for _, id := range cs.VotersOutgoing {
+	for _, id := range cs.GetVotersOutgoing() {
 		// If there are outgoing voters, first add them one by one so that the
 		// (non-joint) config has them all.
-		out = append(out, &pb.ConfChangeSingle{
-			Type:   pb.ConfChangeAddNode.Enum(),
-			NodeId: new(id),
-		})
+		out = append(out, pb.NewConfChangeSingle(pb.ConfChangeAddNode,
+			id),
+		)
 
 	}
 
@@ -66,32 +65,28 @@ func toConfChangeSingle(cs *pb.ConfState) (out []*pb.ConfChangeSingle, in []*pb.
 	// (which will apply on top of the config created by the outgoing slice).
 
 	// First, we'll remove all of the outgoing voters.
-	for _, id := range cs.VotersOutgoing {
-		in = append(in, &pb.ConfChangeSingle{
-			Type:   pb.ConfChangeRemoveNode.Enum(),
-			NodeId: new(id),
-		})
+	for _, id := range cs.GetVotersOutgoing() {
+		in = append(in, pb.NewConfChangeSingle(pb.ConfChangeRemoveNode,
+			id),
+		)
 	}
 	// Then we'll add the incoming voters and learners.
-	for _, id := range cs.Voters {
-		in = append(in, &pb.ConfChangeSingle{
-			Type:   pb.ConfChangeAddNode.Enum(),
-			NodeId: new(id),
-		})
+	for _, id := range cs.GetVoters() {
+		in = append(in, pb.NewConfChangeSingle(pb.ConfChangeAddNode,
+			id),
+		)
 	}
-	for _, id := range cs.Learners {
-		in = append(in, &pb.ConfChangeSingle{
-			Type:   pb.ConfChangeAddLearnerNode.Enum(),
-			NodeId: new(id),
-		})
+	for _, id := range cs.GetLearners() {
+		in = append(in, pb.NewConfChangeSingle(pb.ConfChangeAddLearnerNode,
+			id),
+		)
 	}
 	// Same for LearnersNext; these are nodes we want to be learners but which
 	// are currently voters in the outgoing config.
-	for _, id := range cs.LearnersNext {
-		in = append(in, &pb.ConfChangeSingle{
-			Type:   pb.ConfChangeAddLearnerNode.Enum(),
-			NodeId: new(id),
-		})
+	for _, id := range cs.GetLearnersNext() {
+		in = append(in, pb.NewConfChangeSingle(pb.ConfChangeAddLearnerNode,
+			id),
+		)
 	}
 	return out, in
 }

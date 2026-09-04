@@ -21,7 +21,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 func (st StateType) MarshalJSON() ([]byte, error) {
@@ -221,14 +221,14 @@ func DescribeEntry(e *pb.Entry, f EntryFormatter) string {
 	case pb.EntryNormal:
 		formatted = f(e.GetData())
 	case pb.EntryConfChange:
-		cc := &pb.ConfChange{}
+		cc := pb.NewEmptyConfChange()
 		if err := proto.Unmarshal(e.GetData(), cc); err != nil {
 			formatted = err.Error()
 		} else {
 			formatted = formatConfChange(cc)
 		}
 	case pb.EntryConfChangeV2:
-		cc := &pb.ConfChangeV2{}
+		cc := pb.NewEmptyConfChangeV2()
 		if err := proto.Unmarshal(e.GetData(), cc); err != nil {
 			formatted = err.Error()
 		} else {

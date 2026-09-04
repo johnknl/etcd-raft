@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/datadriven"
 
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.TestData) error {
@@ -64,15 +64,12 @@ func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.Te
 		if len(ccs) > 1 || transition != raftpb.ConfChangeTransitionAuto {
 			return fmt.Errorf("v1 conf change can only have one operation and no transition")
 		}
-		c = &raftpb.ConfChange{
-			Type:   ccs[0].GetType().Enum(),
-			NodeId: new(ccs[0].GetNodeId()),
-		}
+		c = raftpb.NewConfChange(ccs[0].GetType(),
+			ccs[0].GetNodeId(), nil)
+
 	} else {
-		c = &raftpb.ConfChangeV2{
-			Transition: transition.Enum(),
-			Changes:    ccs,
-		}
+		c = raftpb.NewEmptyConfChangeV2().SetTransition(transition).SetChanges(ccs)
+
 	}
 	return env.ProposeConfChange(idx, c)
 }

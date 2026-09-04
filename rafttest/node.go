@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3"
+	"github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 type node struct {

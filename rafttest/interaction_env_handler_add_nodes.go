@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"google.golang.org/protobuf/proto"
 
-	"go.etcd.io/raft/v3"
-	pb "go.etcd.io/raft/v3/raftpb"
+	"github.com/johnknl/etcd-raft/v3"
+	pb "github.com/johnknl/etcd-raft/v3/raftpb"
 )
 
 func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) error {
@@ -36,11 +36,11 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 			case "voters":
 				var id uint64
 				arg.Scan(t, i, &id)
-				snap.Metadata.ConfState.Voters = append(snap.Metadata.ConfState.Voters, id)
+				snap.Metadata.ConfState.Voters = append(snap.Metadata.ConfState.GetVoters(), id)
 			case "learners":
 				var id uint64
 				arg.Scan(t, i, &id)
-				snap.Metadata.ConfState.Learners = append(snap.Metadata.ConfState.Learners, id)
+				snap.Metadata.ConfState.Learners = append(snap.Metadata.ConfState.GetLearners(), id)
 			case "inflight":
 				arg.Scan(t, i, &cfg.MaxInflightMsgs)
 			case "index":
